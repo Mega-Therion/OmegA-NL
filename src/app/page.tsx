@@ -14,12 +14,12 @@ const qualityConfig = {
   lite: { glow: 'shadow-md', density: 'bg-cyan-400/5' }
 }
 
-const generateAssistantReply = async (prompt: string, ragSnippets: string[]): Promise<string> => {
+const generateAssistantReply = async (prompt: string, ragSnippets: string[], agent: string): Promise<string> => {
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, context: ragSnippets })
+      body: JSON.stringify({ prompt, context: ragSnippets, agent })
     })
     const data = await response.json()
     return data.reply || 'Neural link established. Awaiting calibration.'
@@ -32,6 +32,13 @@ const generateAssistantReply = async (prompt: string, ragSnippets: string[]): Pr
     return `[Offline] Acknowledged. Optimizing response for: "${trimmed}". ${grounded}`
   }
 }
+
+const AGENTS = [
+  { id: 'gemini', name: 'Gemini', desc: 'Planning & Strategy' },
+  { id: 'claude', name: 'Claude', desc: 'Deep Reasoning' },
+  { id: 'codex', name: 'Codex', desc: 'Code Execution' },
+  { id: 'grok', name: 'Grok', desc: 'Real-time Search' }
+]
 
 const FallbackScreen = ({ error }: { error: Error }) => (
   <div className="min-h-screen flex items-center justify-center bg-black text-red-400">
@@ -67,6 +74,7 @@ export default function Home() {
   const [ragMatches, setRagMatches] = useState(() => retrieveContext('', knowledgeBase))
   const [isLoading, setIsLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState('gemini')
   const endRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
 
@@ -187,7 +195,7 @@ export default function Home() {
     const ragSnippets = matches.flatMap((match) => match.highlights)
     
     setIsLoading(true)
-    const assistantReply = await generateAssistantReply(input, ragSnippets)
+    const assistantReply = await generateAssistantReply(input, ragSnippets, selectedAgent)
     setIsLoading(false)
 
     addMessage({
@@ -224,6 +232,17 @@ export default function Home() {
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs text-cyan-100/70">
+            <select
+              value={selectedAgent}
+              onChange={(e) => setSelectedAgent(e.target.value)}
+              className="rounded-full border border-purple-400/40 bg-black/40 px-3 py-2 text-xs text-purple-300"
+            >
+              {AGENTS.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name} - {agent.desc}
+                </option>
+              ))}
+            </select>
             <div className="rounded-full border border-cyan-400/30 px-4 py-2">
               FPS: {metrics.fps}
             </div>

@@ -5,7 +5,7 @@ const GAING_BRAIN_URL = process.env.GAING_BRAIN_URL || 'http://localhost:8080'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { prompt, context } = body
+    const { prompt, context, agent = 'gemini' } = body
 
     // Build messages for the LLM
     const messages = [
@@ -25,18 +25,19 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         messages,
         max_tokens: 500,
-        temperature: 0.7
+        temperature: 0.7,
+        model: agent // Route to specific agent/model
       })
     })
 
     if (!response.ok) {
-      // Fallback: try OpenAI-compatible format
+      // Fallback: route via messages API to specific agent
       const fallback = await fetch(`${GAING_BRAIN_URL}/api/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sender: 'jarvis-frontend',
-          recipient: 'gemini',
+          recipient: agent, // Dynamic agent selection
           content: prompt,
           message_type: 'text'
         })
