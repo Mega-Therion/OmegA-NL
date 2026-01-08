@@ -14,12 +14,23 @@ const qualityConfig = {
   lite: { glow: 'shadow-md', density: 'bg-cyan-400/5' }
 }
 
-const generateAssistantReply = (prompt: string, ragSnippets: string[]) => {
-  const trimmed = prompt.slice(0, 140)
-  const grounded = ragSnippets.length
-    ? `Grounded context: ${ragSnippets.join(' | ')}`
-    : 'No external context surfaced; responding from core heuristics.'
-  return `Acknowledged. Optimizing response for: "${trimmed}". ${grounded}`
+const generateAssistantReply = async (prompt: string, ragSnippets: string[]): Promise<string> => {
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, context: ragSnippets })
+    })
+    const data = await response.json()
+    return data.reply || 'Neural link established. Awaiting calibration.'
+  } catch (error) {
+    console.error('Chat API error:', error)
+    const trimmed = prompt.slice(0, 140)
+    const grounded = ragSnippets.length
+      ? `Grounded context: ${ragSnippets.join(' | ')}`
+      : 'No external context surfaced; responding from core heuristics.'
+    return `[Offline] Acknowledged. Optimizing response for: "${trimmed}". ${grounded}`
+  }
 }
 
 const FallbackScreen = ({ error }: { error: Error }) => (
@@ -54,7 +65,10 @@ export default function Home() {
   } = useNeuroStore()
   const [input, setInput] = useState('')
   const [ragMatches, setRagMatches] = useState(() => retrieveContext('', knowledgeBase))
+  const [isLoading, setIsLoading] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -84,9 +98,46 @@ export default function Home() {
     }))
   }, [ragMatches])
 
-  const handleSubmit = (event: React.FormEvent) => {
+  // Voice recognition
+  const startListening = () => {
+    if (typeof window === 'undefined') return
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Speech recognition not supported in this browser')
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onstart = () => setIsListening(true)
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0].transcript)
+        .join('')
+      setInput(transcript)
+      if (ragEnabled) {
+        setRagMatches(retrieveContext(transcript, knowledgeBase))
+      }
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+      setIsListening(false)
+    }
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!input.trim()) return
+    if (!input.trim() || isLoading) return
 
     const timestamp = new Date().toISOString()
     const userMessage = {
@@ -134,13 +185,16 @@ export default function Home() {
     setRagMatches(matches)
 
     const ragSnippets = matches.flatMap((match) => match.highlights)
-    const assistantReply = generateAssistantReply(input, ragSnippets)
+    
+    setIsLoading(true)
+    const assistantReply = await generateAssistantReply(input, ragSnippets)
+    setIsLoading(false)
 
     addMessage({
       id: `assist-${timestamp}`,
       role: 'assistant',
       content: assistantReply,
-      timestamp
+      timestamp: new Date().toISOString()
     })
 
     if (input.length > 8) {
@@ -243,6 +297,18 @@ export default function Home() {
                   <p className="mt-2 text-cyan-100/90">{message.content}</p>
                 </motion.div>
               ))}
+              {isLoading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="rounded-2xl border border-cyan-400/30 bg-cyan-400/5 p-4 text-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="animate-pulse h-2 w-2 rounded-full bg-cyan-400" />
+                    <span className="text-cyan-100/60">Neural pathways syncing...</span>
+                  </div>
+                </motion.div>
+              )}
               <div ref={endRef} />
             </div>
 
@@ -259,16 +325,30 @@ export default function Home() {
                 rows={3}
                 className="w-full resize-none rounded-2xl border border-cyan-400/30 bg-black/30 p-4 text-sm text-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
               />
-              <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between">
                 <div className="text-xs text-cyan-100/50">
                   Commands: /help • /memory &lt;note&gt; • /rag • /quality
                 </div>
-                <button
-                  type="submit"
-                  className="rounded-full border border-cyan-400/60 px-6 py-2 text-xs text-cyan-100 hover:bg-cyan-400/10"
-                >
-                  Send
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={isListening ? stopListening : startListening}
+                    className={`rounded-full border px-4 py-2 text-xs transition-all ${
+                      isListening
+                        ? 'border-red-400/60 bg-red-400/20 text-red-300 animate-pulse'
+                        : 'border-cyan-400/40 text-cyan-100/70 hover:bg-cyan-400/10'
+                    }`}
+                  >
+                    {isListening ? '🎙️ Listening...' : '🎤 Voice'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="rounded-full border border-cyan-400/60 px-6 py-2 text-xs text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-50"
+                  >
+                    {isLoading ? 'Processing...' : 'Send'}
+                  </button>
+                </div>
               </div>
             </form>
           </section>
