@@ -60,7 +60,7 @@ export const useNeuroStore = create<NeuroState>()(
         })),
       toggleRag: () => set((state) => ({ ragEnabled: !state.ragEnabled })),
       setQualityMode: (mode) => set({ qualityMode: mode }),
-      clearSession: () => set({ messages: [] })
+      clearSession: () => set({ messages: [], memory: [] })
     }),
     {
       name: 'neuro-link-memory',
