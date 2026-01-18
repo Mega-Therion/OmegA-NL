@@ -140,6 +140,10 @@ Memory operations.
 
 Check OMEGA Gateway status.
 
+## 📘 OMEGA-Trinity Deployment
+
+For a full deployment and operations walkthrough (Ollama setup, Docker, and verification checks), see the [OMEGA-Trinity deployment guide](docs/omega-trinity-deployment.md).
+
 ## 🛠️ Development
 
 ```bash
