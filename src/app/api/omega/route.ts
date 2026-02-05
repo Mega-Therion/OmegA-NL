@@ -14,6 +14,18 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
 
+        // --- ZAPIER BRIDGE HANDLER ---
+        if (body.source === "ZAPIER_BRIDGE") {
+            console.log("[OMEGA] ⚡ Received Sync from Zapier:", body.data);
+            // Here we would trigger a revalidation or state update in the UI
+            return NextResponse.json({ 
+                ok: true, 
+                message: "Sovereign Web Sync Completed",
+                agent: body.data.agent,
+                timestamp: new Date().toISOString()
+            });
+        }
+
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
         };
